@@ -1,3 +1,3 @@
-from .auth import UserRegister, UserRegisterOut
+from .auth import UserRegister, UserRegisterOut, UserSessionLogin
 
-__all__ = ["UserRegister", "UserRegisterOut"]
+__all__ = ["UserRegister", "UserRegisterOut", "UserSessionLogin"]
