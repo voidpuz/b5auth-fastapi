@@ -36,3 +36,8 @@ class UserRegisterOut(BaseModel):
             }
         },
     }
+
+
+class UserSessionLogin(BaseModel):
+    username: str
+    password: str

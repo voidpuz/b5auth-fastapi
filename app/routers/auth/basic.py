@@ -65,11 +65,14 @@ def decode_basic_auth(auth_header: str) -> tuple[str, str]:
 
 # =========================
 
+
 def get_current_user_basic(db: db_dep, credentials: security_dep):
     return authenticate_user(credentials, db)
 
+
 def get_current_user_basic_manual(db: db_dep, request: Request):
     return authenticate_user_by_hand(request, db)
+
 
 basic_auth_dep = Annotated[User, Depends(get_current_user_basic)]
 basic_auth_manual_dep = Annotated[User, Depends(get_current_user_basic_manual)]
