@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
-from app.dependencies import db_dep
+from typing import Annotated
+
+from app.dependencies import db_dep, current_user_basic_dep, current_user_basic2_dep
 from app.models import User
 from app.schemas import UserRegister, UserRegisterOut
 from app.utils import hash_password
@@ -36,4 +38,22 @@ async def register_user(session: db_dep, user_data: UserRegister):
 async def get_user_with_id(session: db_dep, id: int):
     user = session.query(User).filter(User.id == id).first()
 
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
     return user
+
+
+
+# ======== BASIC AUTH ========
+
+@router.get("/basic/me", response_model=UserRegisterOut)
+async def get_me_basic(db: db_dep, current_user: current_user_basic_dep):
+    return current_user
+
+@router.get("/basic2/me", response_model=UserRegisterOut)
+async def get_me_basic2(db: db_dep, current_user: current_user_basic2_dep):
+    return current_user
