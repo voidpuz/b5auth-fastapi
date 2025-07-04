@@ -1,13 +1,28 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from jose import jwt, JWTError
 
-from app.constants import SESSION_COOKIE_NAME, SESSION_DURATION
-from app.dependencies import db_dep, current_user_session_dep
+from app.constants import (
+    SESSION_COOKIE_NAME,
+    SESSION_DURATION,
+    REFRESH_TOKEN_EXPIRE_MINUTES,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    SECRET_KEY,
+    ALGORITHM
+)
+from app.dependencies import current_user_jwt_dep, current_user_session_dep, db_dep
 from app.models import AuthSession, User
 from app.routers.auth.basic import basic_auth_dep, basic_auth_manual_dep
-from app.schemas import UserRegister, UserRegisterOut, UserSessionLogin
-from app.utils import hash_password, verify_password
+from app.schemas import (
+    UserJWTLogin,
+    UserRegister,
+    UserRegisterOut,
+    UserSessionLogin,
+    JWTRefreshIn,
+    TokenResponse,
+)
+from app.utils import hash_password, verify_password, create_jwt_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -77,7 +92,12 @@ async def login_session(db: db_dep, user_data: UserSessionLogin, response: Respo
 
 
 @router.post("/session/logout")
-async def logout_session(db: db_dep, current_user: current_user_session_dep, request: Request, response: Response):
+async def logout_session(
+    db: db_dep,
+    current_user: current_user_session_dep,
+    request: Request,
+    response: Response,
+):
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if session_id:
         db.query(AuthSession).filter(AuthSession.id == session_id).delete()
@@ -85,3 +105,47 @@ async def logout_session(db: db_dep, current_user: current_user_session_dep, req
 
     response.delete_cookie(SESSION_COOKIE_NAME)
     return {"message": "Logged out"}
+
+
+# ========== JWT AUTH ==========
+
+
+@router.post("/jwt/login")
+async def login_jwt(db: db_dep, user_data: UserJWTLogin):
+    user = db.query(User).filter(User.username == user_data.username).first()
+    if not user or not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    user_dict = {
+        "username": user.username
+    }
+
+    access_token = create_jwt_token(user_dict, ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token = create_jwt_token(user_dict, REFRESH_TOKEN_EXPIRE_MINUTES)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+    }
+
+
+@router.post("/jwt/me", response_model=UserRegisterOut)
+async def jwt_me(current_user: current_user_jwt_dep):
+    return current_user
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(token_data: JWTRefreshIn):
+    try:
+        payload = jwt.decode(token_data.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("username")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        
+        # Check for validity of refresh token
+
+        new_access_token = create_jwt_token(data={"username": username}, expires_delta=ACCESS_TOKEN_EXPIRE_MINUTES)
+        return {"access_token": new_access_token, "refresh_token": token_data.refresh_token, "token_type": "bearer"}
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
